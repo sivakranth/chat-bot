@@ -105,9 +105,11 @@
                     <label for="assignFilter"><i class="fas fa-user-tag"></i> Assigned:</label>
                     <select id="assignFilter" onchange="applyFilters()">
                         <option value="All" {% if filter_assigned=='All' %}selected{% endif %}>All</option>
-                        <option value="unassigned" {% if filter_assigned=='unassigned' %}selected{% endif %}>Unassigned</option>
+                        <option value="unassigned" {% if filter_assigned=='unassigned' %}selected{% endif %}>Unassigned
+                        </option>
                         {% for staff in staff_members %}
-                        <option value="{{ staff.id }}" {% if filter_assigned == staff.id|string %}selected{% endif %}>{{ staff.username }}</option>
+                        <option value="{{ staff.id }}" {% if filter_assigned==staff.id|string %}selected{% endif %}>{{
+                            staff.username }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -127,11 +129,12 @@
         <div class="table-wrapper">
             {% if tickets %}
             <div class="table-header">
-                <h3><i class="fas fa-table"></i> 
-                    {% if filter_status == 'All' %}All Tickets{% else %}{{ filter_status }} Tickets{% endif %} 
+                <h3><i class="fas fa-table"></i>
+                    {% if filter_status == 'All' %}All Tickets{% else %}{{ filter_status }} Tickets{% endif %}
                     (Priority: {{ filter_priority }})
                     {% if current_user.role == "Admin" and filter_assigned != "All" %}
-                        - Assignment: {% if filter_assigned == "unassigned" %}Unassigned{% else %}{{ filter_assigned }}{% endif %}
+                    - Assignment: {% if filter_assigned == "unassigned" %}Unassigned{% else %}{{ filter_assigned }}{%
+                    endif %}
                     {% endif %}
                 </h3>
             </div>
@@ -175,6 +178,18 @@
                                     %}selected{% endif %}>Email/Communication</option>
                                 <option value="Accounts/HR" {% if ticket.ticket_type=='Accounts/HR' %}selected{% endif
                                     %}>Accounts/HR</option>
+                                <option value="Infrastructure/DevOps" {% if ticket.ticket_type=='Infrastructure/DevOps'
+                                    %}selected{% endif %}>Infrastructure/DevOps</option>
+                                <option value="Server/API Issues" {% if ticket.ticket_type=='Server/API Issues'
+                                    %}selected{% endif %}>Server/API Issues</option>
+                                <option value="Monitoring/Alerts" {% if ticket.ticket_type=='Monitoring/Alerts'
+                                    %}selected{% endif %}>Monitoring/Alerts</option>
+                                <option value="Cloud/Hosting" {% if ticket.ticket_type=='Cloud/Hosting' %}selected{%
+                                    endif %}>Cloud/Hosting</option>
+                                <option value="CI/CD Errors" {% if ticket.ticket_type=='CI/CD Errors' %}selected{% endif
+                                    %}>CI/CD Errors</option>
+                                <option value="Infra Security" {% if ticket.ticket_type=='Infra Security' %}selected{%
+                                    endif %}>Infra Security</option>
                                 <option value="General" {% if ticket.ticket_type=='General' %}selected{% endif %}>
                                     General</option>
                             </select>
@@ -194,6 +209,18 @@
                                 <i class="fas fa-envelope"></i> Email/Comm
                                 {% elif ticket.ticket_type == 'Accounts/HR' %}
                                 <i class="fas fa-users"></i> Accounts/HR
+                                {% elif ticket.ticket_type == 'Infrastructure/DevOps' %}
+                                <i class="fas fa-tools"></i> Infra/DevOps
+                                {% elif ticket.ticket_type == 'Server/API Issues' %}
+                                <i class="fas fa-server"></i> Server/API
+                                {% elif ticket.ticket_type == 'Monitoring/Alerts' %}
+                                <i class="fas fa-bell"></i> Monitoring
+                                {% elif ticket.ticket_type == 'Cloud/Hosting' %}
+                                <i class="fas fa-cloud"></i> Cloud/Hosting
+                                {% elif ticket.ticket_type == 'CI/CD Errors' %}
+                                <i class="fas fa-code-branch"></i> CI/CD
+                                {% elif ticket.ticket_type == 'Infra Security' %}
+                                <i class="fas fa-shield-alt"></i> Infra Security
                                 {% else %}
                                 <i class="fas fa-info-circle"></i> General
                                 {% endif %}
@@ -212,7 +239,7 @@
                         <td>
                             {% if current_user.role in ["Staff", "Admin"] %}
                             <select class="status-dropdown" onchange="updateStatus({{ ticket.id }}, this.value)" {% if
-                                ticket.status in ["Closed", "Cancelled"] %}disabled{% endif %}>
+                                ticket.status in ["Closed", "Cancelled" ] %}disabled{% endif %}>
                                 <option value="New" {% if ticket.status=='New' %}selected{% endif %}>➕ New</option>
                                 <option value="Open" {% if ticket.status=='Open' %}selected{% endif %}>🔓 Open</option>
                                 <option value="In Progress" {% if ticket.status=='In Progress' %}selected{% endif %}>⚙️
@@ -253,15 +280,19 @@
                         <td class="assignment-cell">
                             {% if current_user.role == "Admin" %}
                             <select class="assignment-dropdown" onchange="assignTicket({{ ticket.id }}, this.value)">
-                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned</option>
+                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned
+                                </option>
                                 {% for staff in staff_members %}
-                                <option value="{{ staff.id }}" {% if ticket.assigned_to == staff.id %}selected{% endif %}>{{ staff.username }}</option>
+                                <option value="{{ staff.id }}" {% if ticket.assigned_to==staff.id %}selected{% endif %}>
+                                    {{ staff.username }}</option>
                                 {% endfor %}
                             </select>
                             {% elif current_user.role == "Staff" %}
                             <select class="assignment-dropdown" onchange="assignTicket({{ ticket.id }}, this.value)">
-                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned</option>
-                                <option value="{{ current_user.id }}" {% if ticket.assigned_to == current_user.id %}selected{% endif %}>{{ current_user.username }}</option>
+                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned
+                                </option>
+                                <option value="{{ current_user.id }}" {% if ticket.assigned_to==current_user.id
+                                    %}selected{% endif %}>{{ current_user.username }}</option>
                             </select>
                             {% endif %}
                         </td>
@@ -421,7 +452,7 @@
         // ---- Assignment ----
         function assignTicket(ticketId, assignedToId) {
             const assignData = assignedToId === 'unassigned' ? null : parseInt(assignedToId);
-            
+
             $.ajax({
                 url: `/assign_ticket/${ticketId}`,
                 type: 'POST',
