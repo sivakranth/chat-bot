@@ -19,6 +19,7 @@ from database import (
     add_comment as db_add_comment, ensure_db, get_filtered_tickets,
     get_all_staff_members, assign_ticket, update_ticket_category
 )
+ensure_db()
 
 # --- Init ---
 load_dotenv()
