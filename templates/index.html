@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern AI Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+</head>
+
+<body>
+
+    <header>
+        <div>🤖 Modern AI Chat</div>
+        <div class="header-actions">
+            <a href="/tickets" class="header-link">🎫 Tickets</a>
+
+            <!-- User Dropdown -->
+            <div class="user-menu">
+                <div class="user-icon" onclick="toggleDropdown()">👤</div>
+                <div class="dropdown" id="user-dropdown">
+                    <div class="dropdown-username">{{ current_user.username }}</div>
+                    <a href="/logout" class="dropdown-item">⬅️ Logout</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="chat-container">
+        <div class="message bot">👋 Welcome! Ask me anything or request support.</div>
+    </div>
+
+    <div id="input-container">
+        <input type="text" id="message" placeholder="Type your question here..." />
+        <input type="file" id="screenshot" style="display:none;" />
+        <button id="send-btn" onclick="sendMessage()">Send</button>
+        <button id="upload-btn">📎 Upload Screenshot</button>
+    </div>
+
+    <script>
+        function toggleDropdown() {
+            const dropdown = document.getElementById("user-dropdown");
+            dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+        }
+
+        window.addEventListener("click", function (event) {
+            if (!event.target.closest(".user-menu")) {
+                document.getElementById("user-dropdown").style.display = "none";
+            }
+        });
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message');
+        const sendButton = document.getElementById('send-btn');
+
+        const uploadBtn = document.getElementById('upload-btn');
+        const screenshotInput = document.getElementById('screenshot');
+
+        function addMessage(text, sender, quickReplies = [], isImage = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', sender);
+
+            if (isImage) {
+                const img = document.createElement('img');
+                img.src = text;
+                img.alt = 'Screenshot';
+                img.classList.add('screenshot');
+                msgDiv.appendChild(img);
+            } else {
+                msgDiv.innerHTML = text;
+            }
+
+            // Add quick reply buttons
+            quickReplies.forEach(r => {
+                const btn = document.createElement('span');
+                btn.classList.add('quick-reply');
+                btn.innerText = r;
+                btn.onclick = () => { messageInput.value = r; sendMessage(); };
+                msgDiv.appendChild(btn);
+            });
+
+            chatContainer.appendChild(msgDiv);
+            msgDiv.getBoundingClientRect();
+            msgDiv.style.animation = 'fadeIn 0.25s ease-out';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addTicketInfo(ticketId) {
+            const ticketDiv = document.createElement('div');
+            ticketDiv.classList.add('ticket-info');
+            ticketDiv.innerHTML = `🎫 Support Ticket #${ticketId} created!`;
+            chatContainer.appendChild(ticketDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showTyping() {
+            const typingDiv = document.createElement('div');
+            typingDiv.classList.add('typing-indicator');
+            typingDiv.id = 'typing-indicator';
+            typingDiv.innerHTML = `<span></span><span></span><span></span>`;
+            chatContainer.appendChild(typingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function hideTyping() {
+            const t = document.getElementById('typing-indicator');
+            if (t) t.remove();
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            messageInput.value = '';
+            sendButton.disabled = true;
+
+            showTyping();
+
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                hideTyping();
+
+                addMessage(data.reply, 'bot');
+
+                if (data.ticket_id) {
+                    addTicketInfo(data.ticket_id);
+                }
+            } catch (err) {
+                hideTyping();
+                addMessage('⚠️ Error communicating with server', 'bot');
+            } finally {
+                sendButton.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        // Screenshot upload
+        uploadBtn.addEventListener('click', () => screenshotInput.click());
+
+        screenshotInput.addEventListener('change', async () => {
+            if (!screenshotInput.files.length) return;
+
+            const file = screenshotInput.files[0];
+            const formData = new FormData();
+            formData.append('screenshot', file);
+
+            showTyping();
+
+            try {
+                const res = await fetch('/upload_screenshot', { method: 'POST', body: formData });
+                const data = await res.json();
+                hideTyping();
+
+                if (data.success) {
+                    // Show screenshot preview in chat
+                    addMessage(data.file_url, 'user', [], true);
+
+                    // Show extracted error (not full AI reply)
+                    if (data.analysis) {
+                        addMessage(`🛠️ Error detected: <b>${data.analysis}</b>`, 'bot', [
+                            "Yes, create ticket",
+                            "No, thanks"
+                        ]);
+                    }
+
+                    // If a ticket was auto-created
+                    if (data.ticket_id) {
+                        addTicketInfo(data.ticket_id);
+                    }
+                } else {
+                    addMessage(`⚠️ Upload failed: ${data.error}`, 'bot');
+                }
+            } catch (err) {
+                hideTyping();
+                addMessage('⚠️ Error uploading screenshot', 'bot');
+            } finally {
+                screenshotInput.value = '';
+            }
+        });
+
+        messageInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        window.addEventListener('load', () => { messageInput.focus(); });
+    </script>
+
+</body>
+
+</html>

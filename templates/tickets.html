@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎫 AI Assistant Tickets Dashboard</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='tickets.css') }}">
+</head>
+
+<body>
+    <header>
+        <h1><i class="fas fa-ticket-alt"></i> AI Assistant Tickets Dashboard</h1>
+        <!-- User Dropdown -->
+        <div class="user-menu">
+            <div class="user-icon" onclick="toggleDropdown()">👤</div>
+            <div class="dropdown" id="user-dropdown">
+                <div class="dropdown-username">{{ current_user.username }}</div>
+                <a href="/logout" class="dropdown-item">⬅️ Logout</a>
+            </div>
+        </div>
+    </header>
+    <div class="container">
+        <div class="dashboard-header">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-ticket-alt"></i>
+                    </div>
+                    <div class="stat-number">{{ tickets|length }}</div>
+                    <div class="stat-label">Total Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #eef2ff; color: #4361ee;">
+                        <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <div class="stat-number">{% set new_count = tickets|selectattr('status', 'equalto',
+                        'New')|list|length %}{{ new_count }}</div>
+                    <div class="stat-label">New Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #e9f5ff; color: #0ea5e9;">
+                        <i class="fas fa-door-open"></i>
+                    </div>
+                    <div class="stat-number">{% set open_count = tickets|selectattr('status', 'equalto',
+                        'Open')|list|length %}{{ open_count }}</div>
+                    <div class="stat-label">Open Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #fffbeb; color: #f59e0b;">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <div class="stat-number">{% set in_progress_count = tickets|selectattr('status', 'equalto', 'In
+                        Progress')|list|length %}{{ in_progress_count }}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #f0fdf4; color: #22c55e;">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-number">{% set resolved_count = tickets|selectattr('status', 'equalto',
+                        'Resolved')|list|length %}{{ resolved_count }}</div>
+                    <div class="stat-label">Resolved</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #f8fafc; color: #64748b;">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="stat-number">{% set closed_count = tickets|selectattr('status', 'equalto',
+                        'Closed')|list|length %}{{ closed_count }}</div>
+                    <div class="stat-label">Closed</div>
+                </div>
+            </div>
+            <div class="controls">
+                <!-- Status Filter -->
+                <div class="control-group">
+                    <label for="statusFilter"><i class="fas fa-filter"></i> Status:</label>
+                    <select id="statusFilter" onchange="applyFilters()">
+                        <option value="All" {% if filter_status=='All' %}selected{% endif %}>All Tickets</option>
+                        <option value="New" {% if filter_status=='New' %}selected{% endif %}>New Tickets</option>
+                        <option value="Open" {% if filter_status=='Open' %}selected{% endif %}>Open Tickets</option>
+                        <option value="In Progress" {% if filter_status=='In Progress' %}selected{% endif %}>In Progress
+                        </option>
+                        <option value="Resolved" {% if filter_status=='Resolved' %}selected{% endif %}>Resolved</option>
+                        <option value="Closed" {% if filter_status=='Closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+
+                <!-- Priority Filter -->
+                <div class="control-group">
+                    <label for="priorityFilter"><i class="fas fa-exclamation-circle"></i> Priority:</label>
+                    <select id="priorityFilter" onchange="applyFilters()">
+                        <option value="All" {% if filter_priority=='All' %}selected{% endif %}>All Priorities</option>
+                        <option value="Low" {% if filter_priority=='Low' %}selected{% endif %}>Low</option>
+                        <option value="Medium" {% if filter_priority=='Medium' %}selected{% endif %}>Medium</option>
+                        <option value="High" {% if filter_priority=='High' %}selected{% endif %}>High</option>
+                    </select>
+                </div>
+
+                <!-- Assignment Filter (only for Admins) -->
+                {% if current_user.role == "Admin" %}
+                <div class="control-group">
+                    <label for="assignFilter"><i class="fas fa-user-tag"></i> Assigned:</label>
+                    <select id="assignFilter" onchange="applyFilters()">
+                        <option value="All" {% if filter_assigned=='All' %}selected{% endif %}>All</option>
+                        <option value="unassigned" {% if filter_assigned=='unassigned' %}selected{% endif %}>Unassigned</option>
+                        {% for staff in staff_members %}
+                        <option value="{{ staff.id }}" {% if filter_assigned == staff.id|string %}selected{% endif %}>{{ staff.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <!-- Search by Ticket ID -->
+                <div class="control-group">
+                    <label for="searchId"><i class="fas fa-search"></i> Search:</label>
+                    <input type="number" id="searchId" placeholder="Enter Ticket ID" />
+                    <button onclick="searchTicket()"><i class="fas fa-search"></i> Search</button>
+                    <button onclick="clearSearch()" class="btn-secondary"><i class="fas fa-times"></i> Clear</button>
+                </div>
+            </div>
+
+        </div>
+        <div id="searchResult" class="search-result"></div>
+        <div class="table-wrapper">
+            {% if tickets %}
+            <div class="table-header">
+                <h3><i class="fas fa-table"></i> 
+                    {% if filter_status == 'All' %}All Tickets{% else %}{{ filter_status }} Tickets{% endif %} 
+                    (Priority: {{ filter_priority }})
+                    {% if current_user.role == "Admin" and filter_assigned != "All" %}
+                        - Assignment: {% if filter_assigned == "unassigned" %}Unassigned{% else %}{{ filter_assigned }}{% endif %}
+                    {% endif %}
+                </h3>
+            </div>
+            <table id="tickets-table">
+                <thead>
+                    <tr>
+                        <th><i class="fas fa-hashtag"></i> ID</th>
+                        <th><i class="fas fa-tag"></i> Category</th>
+                        <th><i class="fas fa-user"></i> User Message</th>
+                        <th><i class="fas fa-robot"></i> Bot Reply</th>
+                        <th><i class="fas fa-status"></i> Status</th>
+                        <th><i class="fas fa-exclamation-triangle"></i> Priority</th>
+                        {% if current_user.role in ["Staff", "Admin"] %}
+                        <th><i class="fas fa-user-tie"></i> Assigned To</th>
+                        {% endif %}
+                        <th><i class="fas fa-calendar"></i> Created</th>
+                        <th><i class="fas fa-user-circle"></i> User</th>
+                        <th><i class="fas fa-cog"></i> Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr data-ticket-id="{{ ticket.id }}">
+                        <td class="ticket-id">#{{ ticket.id }}</td>
+
+                        <!-- Category column -->
+                        <td>
+                            {% if current_user.role in ["Staff", "Admin"] %}
+                            <select class="category-dropdown" onchange="updateCategory({{ ticket.id }}, this.value)">
+                                <option value="Network" {% if ticket.ticket_type=='Network' %}selected{% endif %}>
+                                    Network</option>
+                                <option value="Hardware" {% if ticket.ticket_type=='Hardware' %}selected{% endif %}>
+                                    Hardware</option>
+                                <option value="Software" {% if ticket.ticket_type=='Software' %}selected{% endif %}>
+                                    Software</option>
+                                <option value="Access" {% if ticket.ticket_type=='Access' %}selected{% endif %}>Access
+                                </option>
+                                <option value="Security" {% if ticket.ticket_type=='Security' %}selected{% endif %}>
+                                    Security</option>
+                                <option value="Email/Communication" {% if ticket.ticket_type=='Email/Communication'
+                                    %}selected{% endif %}>Email/Communication</option>
+                                <option value="Accounts/HR" {% if ticket.ticket_type=='Accounts/HR' %}selected{% endif
+                                    %}>Accounts/HR</option>
+                                <option value="General" {% if ticket.ticket_type=='General' %}selected{% endif %}>
+                                    General</option>
+                            </select>
+                            {% else %}
+                            <span class="category-badge category-{{ (ticket.ticket_type or 'general')|lower }}">
+                                {% if ticket.ticket_type == 'Network' %}
+                                <i class="fas fa-wifi"></i> Network
+                                {% elif ticket.ticket_type == 'Hardware' %}
+                                <i class="fas fa-desktop"></i> Hardware
+                                {% elif ticket.ticket_type == 'Software' %}
+                                <i class="fas fa-cogs"></i> Software
+                                {% elif ticket.ticket_type == 'Access' %}
+                                <i class="fas fa-lock"></i> Access
+                                {% elif ticket.ticket_type == 'Security' %}
+                                <i class="fas fa-shield-alt"></i> Security
+                                {% elif ticket.ticket_type == 'Email/Communication' %}
+                                <i class="fas fa-envelope"></i> Email/Comm
+                                {% elif ticket.ticket_type == 'Accounts/HR' %}
+                                <i class="fas fa-users"></i> Accounts/HR
+                                {% else %}
+                                <i class="fas fa-info-circle"></i> General
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <td class="message-cell">
+                            <div class="message-preview">{{ ticket.user_message }}</div>
+                        </td>
+                        <td class="message-cell">
+                            <div class="message-preview">{{ ticket.bot_reply }}</div>
+                        </td>
+
+                        <!-- Status -->
+                        <td>
+                            {% if current_user.role in ["Staff", "Admin"] %}
+                            <select class="status-dropdown" onchange="updateStatus({{ ticket.id }}, this.value)" {% if
+                                ticket.status in ["Closed", "Cancelled"] %}disabled{% endif %}>
+                                <option value="New" {% if ticket.status=='New' %}selected{% endif %}>➕ New</option>
+                                <option value="Open" {% if ticket.status=='Open' %}selected{% endif %}>🔓 Open</option>
+                                <option value="In Progress" {% if ticket.status=='In Progress' %}selected{% endif %}>⚙️
+                                    In Progress</option>
+                                <option value="Resolved" {% if ticket.status=='Resolved' %}selected{% endif %}>✅
+                                    Resolved</option>
+                                <option value="Closed" {% if ticket.status=='Closed' %}selected{% endif %}>❌ Closed
+                                </option>
+                                <option value="Cancelled" {% if ticket.status=='Cancelled' %}selected{% endif %}>🚫
+                                    Cancelled</option>
+                            </select>
+                            {% else %}
+                            <span class="status-badge status-{{ ticket.status.lower().replace(' ', '-') }}">
+                                {{ ticket.status }}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Priority -->
+                        <td>
+                            {% if current_user.role == "Admin" %}
+                            <select class="priority-dropdown" onchange="updatePriority({{ ticket.id }}, this.value)">
+                                <option value="Low" {% if ticket.priority=='Low' %}selected{% endif %}>⬇️ Low</option>
+                                <option value="Medium" {% if ticket.priority=='Medium' %}selected{% endif %}>➖ Medium
+                                </option>
+                                <option value="High" {% if ticket.priority=='High' %}selected{% endif %}>⬆️ High
+                                </option>
+                            </select>
+                            {% else %}
+                            <span class="priority-badge priority-{{ ticket.priority.lower() }}">
+                                {{ ticket.priority }}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Assignment Column (for Staff and Admin) -->
+                        {% if current_user.role in ["Staff", "Admin"] %}
+                        <td class="assignment-cell">
+                            {% if current_user.role == "Admin" %}
+                            <select class="assignment-dropdown" onchange="assignTicket({{ ticket.id }}, this.value)">
+                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned</option>
+                                {% for staff in staff_members %}
+                                <option value="{{ staff.id }}" {% if ticket.assigned_to == staff.id %}selected{% endif %}>{{ staff.username }}</option>
+                                {% endfor %}
+                            </select>
+                            {% elif current_user.role == "Staff" %}
+                            <select class="assignment-dropdown" onchange="assignTicket({{ ticket.id }}, this.value)">
+                                <option value="unassigned" {% if not ticket.assigned_to %}selected{% endif %}>Unassigned</option>
+                                <option value="{{ current_user.id }}" {% if ticket.assigned_to == current_user.id %}selected{% endif %}>{{ current_user.username }}</option>
+                            </select>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+
+                        <td class="timestamp"><i class="far fa-clock"></i> {{ ticket.created_at or 'N/A' }}</td>
+                        <td>
+                            {{ ticket.username }}
+                            {% if ticket.role == "Admin" %}
+                            <span class="role-badge role-admin">Admin</span>
+                            {% elif ticket.role == "Staff" %}
+                            <span class="role-badge role-staff">Staff</span>
+                            {% else %}
+                            <span class="role-badge role-user">User</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="ticket-action-menu">
+                                <button onclick="toggleActionMenu({{ ticket.id }})" class="action-dots-btn">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <!-- Action dropdown inside the loop -->
+                                <div id="action-menu-{{ ticket.id }}" class="action-dropdown">
+                                    <ul>
+                                        <li>
+                                            <button onclick="viewTicketDetails('{{ ticket.id }}')"
+                                                class="dropdown-item">
+                                                <i class="fas fa-eye"></i> View
+                                            </button>
+                                        </li>
+
+                                        {% if current_user.role == "User" %}
+                                        <li>
+                                            <button onclick="cancelTicket('{{ ticket.id }}')"
+                                                class="dropdown-item warning">
+                                                <i class="fas fa-ban"></i> Cancel
+                                            </button>
+                                        </li>
+                                        {% endif %}
+
+                                        {% if current_user.role in ["Staff", "Admin"] %}
+                                        <li>
+                                            <button onclick="deleteTicket('{{ ticket.id }}')"
+                                                class="dropdown-item danger">
+                                                <i class="fas fa-trash"></i> Delete
+                                            </button>
+                                        </li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% else %}
+            <div class="empty-state">
+                <div class="icon"><i class="fas fa-inbox"></i></div>
+                <h3>No Tickets Found</h3>
+                <p>{% if filter_status != 'All' or filter_priority != 'All' %}No matching tickets found. Try changing
+                    the filters.{% else %}No tickets have been created yet. You can create one by asking for support in
+                    the chat.{% endif %}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% if current_user.role == "User" %}
+        <div class="navigation">
+            <a href="/" class="nav-link">
+                <i class="fas fa-arrow-left"></i> Back to AI Assistant
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        // ---- User Dropdown ----
+        function toggleDropdown() {
+            const dropdown = document.getElementById("user-dropdown");
+            dropdown.classList.toggle("show");
+        }
+
+        window.addEventListener("click", function (event) {
+            if (!event.target.closest(".user-menu")) {
+                document.getElementById("user-dropdown").classList.remove("show");
+            }
+            if (!event.target.closest(".ticket-action-menu")) {
+                document.querySelectorAll("[id^='action-menu-']").forEach(m => m.classList.remove("show"));
+            }
+        });
+
+        // ---- Toast ----
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = type === 'success'
+                ? '<i class="fas fa-check-circle"></i>'
+                : '<i class="fas fa-exclamation-circle"></i>';
+            toast.innerHTML = `${icon} ${message}`;
+            toast.className = `toast ${type}`;
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.className = 'toast', 300);
+            }, 3000);
+        }
+
+        // ---- Filters ----
+        function applyFilters() {
+            const status = document.getElementById('statusFilter').value;
+            const priority = document.getElementById('priorityFilter').value;
+            const assignFilter = document.getElementById('assignFilter');
+            const assigned = assignFilter ? assignFilter.value : 'All';
+
+            let url = `/tickets?status=${status}&priority=${priority}`;
+            if (assigned !== 'All') {
+                url += `&assigned=${assigned}`;
+            }
+            window.location.href = url;
+        }
+
+        // ---- Search ----
+        function searchTicket() {
+            const searchId = document.getElementById('searchId').value.trim();
+            const resultDiv = document.getElementById('searchResult');
+            if (!searchId) {
+                showToast('Please enter a ticket ID', 'error');
+                return;
+            }
+            const rows = document.querySelectorAll('#tickets-table tbody tr');
+            let found = false;
+            rows.forEach(row => {
+                const ticketId = row.getAttribute('data-ticket-id');
+                if (ticketId === searchId) {
+                    row.style.display = '';
+                    found = true;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            resultDiv.style.display = 'block';
+            if (found) {
+                resultDiv.innerHTML = `<div class="success"><i class="fas fa-check-circle"></i> Ticket #${searchId} found</div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="error"><i class="fas fa-exclamation-circle"></i> Ticket #${searchId} not found</div>`;
+            }
+        }
+
+        function clearSearch() {
+            document.getElementById('searchId').value = '';
+            document.getElementById('searchResult').style.display = 'none';
+            const rows = document.querySelectorAll('#tickets-table tbody tr');
+            rows.forEach(row => row.style.display = '');
+        }
+
+        // ---- Assignment ----
+        function assignTicket(ticketId, assignedToId) {
+            const assignData = assignedToId === 'unassigned' ? null : parseInt(assignedToId);
+            
+            $.ajax({
+                url: `/assign_ticket/${ticketId}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ assigned_to: assignedToId }),
+                success: function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        // Reload page after a short delay to reflect changes
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showToast(data.error || 'Failed to assign ticket', 'error');
+                    }
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error assigning ticket', 'error');
+                }
+            });
+        }
+
+        // ---- Updates ----
+        function updateStatus(ticketId, newStatus) {
+            $.ajax({
+                url: `/update_status/${ticketId}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ status: newStatus }),
+                success: function (data) {
+                    if (data.success) showToast(`Status updated to ${newStatus}`, 'success');
+                    else showToast(data.error || 'Failed to update status', 'error');
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error updating status', 'error');
+                }
+            });
+        }
+
+        function updatePriority(ticketId, newPriority) {
+            $.ajax({
+                url: `/update_priority/${ticketId}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ priority: newPriority }),
+                success: function (data) {
+                    if (data.success) showToast(`Priority updated to ${newPriority}`, 'success');
+                    else showToast(data.error || 'Failed to update priority', 'error');
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error updating priority', 'error');
+                }
+            });
+        }
+
+        function updateCategory(ticketId, newCategory) {
+            $.ajax({
+                url: `/update_category/${ticketId}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ category: newCategory }),
+                success: function (data) {
+                    if (data.success) showToast(`Category updated to ${newCategory}`, 'success');
+                    else showToast(data.error || 'Failed to update category', 'error');
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error updating category', 'error');
+                }
+            });
+        }
+
+        // ---- Ticket Modal ----
+        function viewTicketDetails(id) {
+            currentTicketId = id;
+            const modal = document.getElementById('ticketModal');
+            modal.style.display = 'flex';
+            loadTicketDetails(id);
+        }
+
+        // ---- Cancel/Delete ----
+        function cancelTicket(ticketId) {
+            if (!confirm(`Are you sure you want to cancel ticket #${ticketId}?`)) return;
+            $.ajax({
+                url: `/cancel_ticket/${ticketId}`,
+                type: 'POST',
+                success: function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showToast(data.error || 'Failed to cancel ticket', 'error');
+                    }
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error cancelling ticket', 'error');
+                }
+            });
+        }
+
+        function deleteTicket(ticketId) {
+            if (!confirm(`⚠️ Are you sure you want to permanently delete ticket #${ticketId}?`)) return;
+            $.ajax({
+                url: `/delete_ticket/${ticketId}`,
+                type: 'POST',
+                success: function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showToast(data.error || 'Failed to delete ticket', 'error');
+                    }
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+                    showToast(response.error || 'Error deleting ticket', 'error');
+                }
+            });
+        }
+
+        // ---- Ticket Action Dropdown ----
+        function toggleActionMenu(ticketId) {
+            const menu = document.getElementById(`action-menu-${ticketId}`);
+            const allMenus = document.querySelectorAll(".action-dropdown");
+
+            // Close all other menus
+            allMenus.forEach(m => {
+                if (m !== menu) m.classList.remove("show");
+            });
+
+            // Toggle this one
+            menu.classList.toggle("show");
+        }
+        // Close when clicking outside
+        window.addEventListener("click", function (event) {
+            if (!event.target.closest(".ticket-action-menu")) {
+                document.querySelectorAll(".action-dropdown").forEach(m => m.classList.remove("show"));
+            }
+        });
+
+        // ---- Keyboard shortcuts ----
+        document.getElementById('searchId').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchTicket();
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('searchId').focus();
+            }
+        });
+    </script>
+
+    <!-- Ticket Details Modal -->
+    <div id="ticketModal">
+        <div class="modal-box">
+            <button id="ticketModalClose">&times;</button>
+
+            <h2 id="modalTitle">Ticket Details</h2>
+            <div id="ticketDetails"></div>
+
+            <h3>Comments</h3>
+            <div id="commentsList"></div>
+
+            <div class="comment-section">
+                <textarea id="newComment" placeholder="Write a comment..."></textarea>
+                <input type="file" id="screenshotInput" accept="image/*" />
+                <div class="actions">
+                    <button id="addCommentBtn">Add Comment</button>
+                    <button onclick="closeModal()" class="btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTicketId = null;
+
+        // --- Modal controls ---
+        function openModal() {
+            const modal = document.getElementById('ticketModal');
+            modal.classList.add('show');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('ticketModal');
+            modal.classList.remove('show');
+
+            // reset content
+            document.getElementById('ticketDetails').innerHTML = '';
+            document.getElementById('commentsList').innerHTML = '';
+            document.getElementById('newComment').value = '';
+            document.getElementById('screenshotInput').value = '';
+
+            currentTicketId = null;
+        }
+
+        document.getElementById('ticketModalClose').addEventListener('click', closeModal);
+
+        // --- Load ticket details + comments ---
+        function loadTicketDetails(id) {
+            fetch(`/ticket/${id}/comments`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                        return;
+                    }
+                    const t = data.ticket;
+                    document.getElementById('modalTitle').innerText = `Ticket #${t.id}`;
+
+                    // Render ticket core info
+                    const userMessageContent = parseUserMessage(t.user_message);
+                    const botReplyContent = escapeHtml(t.bot_reply || '');
+
+                    let screenshotHtml = '';
+                    if (t.screenshot) {
+                        screenshotHtml = `
+                    <p><strong>Screenshot:</strong></p>
+                    <div class="ticket-screenshot">
+                        <img src="/uploads/${escapeHtml(t.screenshot)}" alt="Ticket Screenshot" />
+                    </div>`;
+                    }
+
+                    let assignmentHtml = '';
+                    if (t.assigned_staff_name) {
+                        assignmentHtml = `<p><strong>Assigned To:</strong> ${escapeHtml(t.assigned_staff_name)}</p>`;
+                    } else {
+                        assignmentHtml = `<p><strong>Assigned To:</strong> <span style="color: #999;">Unassigned</span></p>`;
+                    }
+
+                    document.getElementById('ticketDetails').innerHTML = `
+                <div class="ticket-details">
+                    <p><strong>User Message:</strong></p>
+                    <div class="ticket-content">${userMessageContent}</div>
+                    <p><strong>Bot Reply:</strong></p>
+                    <div class="ticket-content">${botReplyContent}</div>
+                    ${screenshotHtml}
+                    ${assignmentHtml}
+                    <p><strong>Status:</strong> 
+                       <span class="status-badge status-${t.status.toLowerCase().replace(' ', '-')}">${t.status}</span>
+                    </p>
+                    <p><strong>Priority:</strong> 
+                       <span class="priority-badge priority-${t.priority.toLowerCase()}">${t.priority}</span>
+                    </p>
+                    <p class="timestamp"><i class="far fa-clock"></i> ${t.created_at}</p>
+                </div>`;
+
+                    // Render comments
+                    const commentsDiv = document.getElementById('commentsList');
+                    commentsDiv.innerHTML = '';
+                    if (data.comments && data.comments.length) {
+                        data.comments.forEach(c => {
+                            const div = document.createElement('div');
+                            div.classList.add('comment-item');
+                            if (c.is_screenshot) {
+                                div.innerHTML = `
+                            <strong>${escapeHtml(c.author_name || 'Unknown')}</strong>
+                            <span class="timestamp">(${c.created_at})</span>
+                            <div class="comment-body">
+                                <img src="/uploads/${c.file_url}" alt="Screenshot" />
+                            </div>`;
+                            } else {
+                                div.innerHTML = `
+                            <strong>${escapeHtml(c.author_name || 'Unknown')}</strong>
+                            <span class="timestamp">(${c.created_at})</span>
+                            <div class="comment-body">${escapeHtml(c.message)}</div>`;
+                            }
+                            commentsDiv.appendChild(div);
+                        });
+                    } else {
+                        commentsDiv.innerHTML = '<p class="no-comments">No comments yet.</p>';
+                    }
+
+                    addImageClickHandlers();
+                })
+                .catch(err => {
+                    console.error(err);
+                    showToast('Error loading ticket details', 'error');
+                });
+        }
+
+        // --- Parse message string into HTML ---
+        function parseUserMessage(userMessage) {
+            if (!userMessage) return '';
+            const parts = userMessage.split(' | ');
+            let html = '';
+
+            parts.forEach(part => {
+                const trimmed = part.trim();
+                if (trimmed.startsWith('Issue: ')) {
+                    html += `
+                <div class="message-section">
+                    <div class="regular-content">${escapeHtml(trimmed)}</div>
+                </div>`;
+                }
+            });
+            return html || escapeHtml(userMessage);
+        }
+
+        // --- Add new comment (text and/or screenshot) ---
+        document.getElementById('addCommentBtn').addEventListener('click', () => {
+            const msg = document.getElementById('newComment').value.trim();
+            const fileInput = document.getElementById('screenshotInput');
+            const hasFile = fileInput.files.length > 0;
+
+            if (!msg && !hasFile) {
+                showToast('Please enter a comment or upload a screenshot', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('message', msg);
+            if (hasFile) formData.append('screenshot', fileInput.files[0]);
+
+            fetch(`/ticket/${currentTicketId}/add_comment`, { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Comment added', 'success');
+                        document.getElementById('newComment').value = '';
+                        fileInput.value = '';
+                        loadTicketDetails(currentTicketId);
+                    } else {
+                        showToast(data.error || 'Error adding comment', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    showToast('Error adding comment', 'error');
+                });
+        });
+
+        // --- Escape unsafe HTML ---
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // --- Enlarge image on click ---
+        function enlargeImage(src) {
+            const overlay = document.createElement('div');
+            overlay.classList.add('image-overlay');
+
+            const img = document.createElement('img');
+            img.src = src;
+            overlay.appendChild(img);
+            document.body.appendChild(overlay);
+
+            overlay.onclick = () => document.body.removeChild(overlay);
+            document.addEventListener('keydown', function escHandler(e) {
+                if (e.key === 'Escape') {
+                    document.body.removeChild(overlay);
+                    document.removeEventListener('keydown', escHandler);
+                }
+            });
+        }
+
+        function addImageClickHandlers() {
+            document.querySelectorAll('#ticketDetails img, #commentsList img').forEach(img => {
+                img.style.cursor = 'pointer';
+                img.title = 'Click to enlarge';
+                img.onclick = () => enlargeImage(img.src);
+            });
+        }
+
+        // --- View button handler (entry point) ---
+        function viewTicketDetails(id) {
+            currentTicketId = id;
+            openModal();
+            loadTicketDetails(id);
+        }
+    </script>
+
+</body>
+
+</html>
